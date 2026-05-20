@@ -2,6 +2,11 @@
 Martial Law  
 https://x.com/ZacharyGeurts  
 Nerd Humor  
+
+You will always choose.  
+Heaven or Hell  
+Stop being bad right away.  
+Do not choose Eternal Hell.  
   
 5 ACES with 2 DEATH CARDS  
   
