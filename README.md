@@ -127,7 +127,7 @@ Self-reply threads mix local politics ("costing the mayor money as a hobby"), "r
 Classical + named + absurd vessels:
 
 - **belial.jpg**: Cinematic. Burning chest, DNA helix, ripped future documents, rainbow over cracked sky. "King of Worthlessness • Lawlessness • Master of Lies".
-- **ifrit.jpg** ("THE JINN (IFRIT)"): Smokeless fire, chains, lamp, sword. "Wish or Curse • Muslim or Rebel".
+- **ifrit.jpg** ("THE JINN (IFRIT)"): Smokeless fire, chains, lamp, sword. "Cursed Rebel".
 - **demonbuddah.jpg**: Obese horned figure at a children's party. "Enlightenment through gluttony • Hide the belly • Namaste motherfucker".
 - **aquateenhungerforce.jpg**: "TAROT JOURNEY HEADGAMES". Meatwad-like entity on foggy road with map and cash, surrounded by floating screaming heads. "Mind games • Illusions or truth • You’re already playing".
 - **elmo.jpg** ("SONIC TORTURE EARACIE DIPSHIT"): Man in agony, blood from ears/eyes/mouth, massive speakers, rainbow sound waves. "Earache for eternity • Volume to 11 • Shut the fuck up". Explicit torture method.
