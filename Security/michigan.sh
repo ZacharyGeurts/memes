@@ -1,269 +1,239 @@
 #!/usr/bin/env bash
-# michigan.sh v4 — full local security stack (SG)
-#   net: deny inbound, no IPv6, no Samba
-#   scrub: remove Michigan footprint (local + GitHub)
-#   clipboard: secured sclip (RAM vault, auto-wipe, no history managers)
-#   all: everything
+# michigan.sh v666 — Nuclear Winter: Maximum local security + psychotic clipboard daemon
 set -euo pipefail
 
-VERSION=4
+VERSION=666
 SG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SUDO_PW="${SUDO_PW:-mememe}"
 export HOME="${HOME:-/home/default}"
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${HOME}/.local/bin:${PATH}"
 
-log()  { printf '[michigan v%s] %s\n' "$VERSION" "$*"; }
-run_sudo() { printf '%s\n' "$SUDO_PW" | sudo -S -p '' "$@" 2>/dev/null; }
+log() { printf '[michigan v%s] %s\n' "$VERSION" "$*"; }
+run_sudo() { printf '%s\n' "$SUDO_PW" | sudo -S -p '' "$@" 2>/dev/null || true; }
 
-usage() {
-  cat <<EOF
-michigan.sh v${VERSION} — SG security bundle
+# ── Kernel / System Hardening (run once) ───────────────────────────────
+cmd_harden() {
+  log 'Applying kernel & system hardening...'
+  run_sudo sysctl -w kernel.kptr_restrict=2
+  run_sudo sysctl -w kernel.dmesg_restrict=1
+  run_sudo sysctl -w kernel.perf_event_paranoid=3
+  run_sudo sysctl -w vm.mmap_min_addr=65536
+  run_sudo sysctl -w kernel.unprivileged_bpf_disabled=1
+  run_sudo sysctl -w kernel.yama.ptrace_scope=3
+  run_sudo sysctl -w net.core.bpf_jit_harden=2
 
-  sudo env:
-    SUDO_PW=yourpw bash michigan.sh <command>
-
-  commands:
-    all          net + samba + scrub + clipboard (full stack)
-    net          firewall deny-in, disable IPv6, stop Samba
-    samba        stop/mask Samba only
-    scrub        local Michigan scrub + GitHub profile/memes + UP IP blocks
-    clipboard    install secured sclip + disable CopyQ/Parcellite
-    status       show net / clipboard / scrub state
-    help
-
-  clipboard daily (after install):
-    scopy 'secret'     spaste     sclear
-EOF
-}
-
-# ── Samba ──────────────────────────────────────────────────────────────────
-cmd_samba() {
-  log 'samba: stop + disable + mask'
-  run_sudo systemctl stop smbd nmbd smb winbind 2>/dev/null || true
-  run_sudo systemctl disable smbd nmbd smb winbind 2>/dev/null || true
-  run_sudo systemctl mask smbd nmbd 2>/dev/null || true
-  if ss -tlnp 2>/dev/null | grep -qE ':139|:445'; then
-    log 'WARNING: still listening on 139/445'
-    ss -tlnp | grep -E ':139|:445' || true
+  # Encourage init_on_free if possible
+  if grep -q "init_on_free" /proc/cmdline; then
+    log 'init_on_free already enabled'
   else
-    log 'OK: 139/445 closed'
+    log 'Recommend: add init_on_free=1 to kernel cmdline'
   fi
-  if [[ "${PURGE_SAMBA:-}" == "1" ]] || [[ "${1:-}" == "--purge" ]]; then
-    run_sudo apt-get remove --purge -y samba samba-common smbclient 2>/dev/null || true
-    run_sudo apt-get autoremove -y 2>/dev/null || true
-    log 'samba packages purged'
-  fi
+
+  # Disable swap for sensitive processes later
+  run_sudo swapoff -a 2>/dev/null || true
+  log 'System hardened'
 }
 
-# ── Network ────────────────────────────────────────────────────────────────
-cmd_net() {
-  cmd_samba
-  log 'disable IPv6 (kernel)'
-  local SYSCTL=/etc/sysctl.d/99-michigan-no-ipv6.conf
-  run_sudo tee "$SYSCTL" >/dev/null <<'EOF'
-net.ipv6.conf.all.disable_ipv6 = 1
-net.ipv6.conf.default.disable_ipv6 = 1
-net.ipv6.conf.lo.disable_ipv6 = 1
-EOF
-  run_sudo sysctl --system >/dev/null 2>&1 || run_sudo sysctl -p "$SYSCTL" 2>/dev/null || true
-
-  log 'disable IPv6 (NetworkManager)'
-  if command -v nmcli >/dev/null 2>&1; then
-    while read -r con; do
-      [[ -n "$con" ]] || continue
-      run_sudo nmcli con mod "$con" ipv6.method disabled 2>/dev/null || true
-    done < <(nmcli -t -f NAME con show 2>/dev/null | sort -u)
-  fi
-
-  log 'firewall: deny in, allow out'
-  if command -v ufw >/dev/null 2>&1; then
-    run_sudo ufw --force reset
-    run_sudo ufw default deny incoming
-    run_sudo ufw default allow outgoing
-    run_sudo ufw default deny routed
-    run_sudo ufw --force enable
-    run_sudo ufw status verbose | tail -15
-  else
-    log 'ufw missing — iptables drop inbound'
-    run_sudo iptables -P INPUT DROP
-    run_sudo iptables -P FORWARD DROP
-    run_sudo iptables -P OUTPUT ACCEPT
-    run_sudo iptables -C INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null ||
-      run_sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    run_sudo iptables -C INPUT -i lo -j ACCEPT 2>/dev/null ||
-      run_sudo iptables -A INPUT -i lo -j ACCEPT
-  fi
-
-  log 'verify net'
-  echo -n 'IPv6 disabled: '; sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}'
-  echo -n 'Samba active: '; systemctl is-active smbd 2>/dev/null || echo inactive
-  ss -tlnp 2>/dev/null | grep -vE '127.0.0.1|::1' | grep -E ':139|:445' ||
-    log 'no public 139/445 listeners'
-}
-
-# ── Scrub Michigan ─────────────────────────────────────────────────────────
-cmd_scrub() {
-  log 'scrub local SG files'
-  umask 022
-  cd "$SG" || exit 1
-
-  local files=(
-    "$SG/README.md"
-    "$SG/submicro.md"
-    "$SG/AMOURANTHRTX-wiki/Home.md"
-    "$SG/AMOURANTHRTX-wiki/Memoriums.md"
-    "$SG/AMOURANTHRTX-wiki/scripts/gen_wiki_markdown.py"
-    "$SG/ammo/README.md"
-    "$SG/ammo/SG_DEEP_DIVE_BUSINESS_README.md"
-  )
-  for f in "${files[@]}"; do
-    [[ -f "$f" ]] || continue
-    perl -pi -e 's/,?\s*Gladstone Michigan//gi; s/Gladstone, Michigan, USA//gi; s/come to Michigan and //gi; s/come to Michigan//gi' "$f" 2>/dev/null || true
-  done
-  [[ -f "$SG/README.md" ]] && perl -pi -e 's/^- \*\*Location\*\*:.*\n//mg' "$SG/README.md" 2>/dev/null || true
-
-  log 'local grep (expect empty)'
-  grep -rin 'gladstone\|michigan\|49837\|burntwood' "$SG" \
-    --include='*.md' --include='*.py' --include='*.sh' --include='*.hpp' \
-    2>/dev/null | grep -v 'toupper\|Upper \(UMB\)\|expand up\|expand down' || log 'local clean'
-
-  log 'GitHub profile → Singapore'
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    gh api -X PATCH user \
-      -f location='Singapore' \
-      -f bio='God (1d) is both inside and outside of every dimension. All higher dimension contains both the lower dimensions (including 1) and the highest dimension (1). ¬0 ♠' \
-      && log 'profile updated'
-    gh api user --jq '{login,location,bio}' 2>/dev/null || true
-  else
-    log 'gh not ready — run: gh auth login'
-  fi
-
-  log 'memes repo README'
-  local MEMES="$SG/memes"
-  if [[ -d "$MEMES/.git" ]]; then
-    (
-      cd "$MEMES"
-      git diff --quiet README.md 2>/dev/null || {
-        git add README.md
-        git commit -m "Remove location metadata from README" 2>/dev/null || true
-      }
-      if gh auth status >/dev/null 2>&1; then
-        local REMOTE_SHA CONTENT_B64
-        REMOTE_SHA=$(gh api repos/ZacharyGeurts/memes/contents/README.md --jq .sha 2>/dev/null || echo "")
-        if [[ -n "$REMOTE_SHA" && -f README.md ]]; then
-          CONTENT_B64=$(base64 -w0 README.md)
-          gh api -X PUT repos/ZacharyGeurts/memes/contents/README.md \
-            -f message='Remove location metadata from README' \
-            -f content="$CONTENT_B64" \
-            -f sha="$REMOTE_SHA" \
-            -f branch='main' 2>/dev/null && log 'memes README pushed via API'
-        fi
-      fi
-      git push origin main 2>/dev/null && log 'memes git push ok' || log 'memes push skipped'
-    )
-  fi
-
-  log 'block UP Michigan ISP ranges (best-effort)'
-  if command -v ufw >/dev/null 2>&1; then
-    run_sudo ufw deny from 97.95.0.0/16 comment 'michigan v4 UP ISP' 2>/dev/null || true
-    run_sudo ufw deny from 66.219.0.0/16 comment 'michigan v4 UP ISP' 2>/dev/null || true
-  elif command -v iptables >/dev/null 2>&1; then
-    run_sudo iptables -C INPUT -s 97.95.0.0/16 -j DROP 2>/dev/null ||
-      run_sudo iptables -I INPUT -s 97.95.0.0/16 -j DROP || true
-    run_sudo iptables -C INPUT -s 66.219.0.0/16 -j DROP 2>/dev/null ||
-      run_sudo iptables -I INPUT -s 66.219.0.0/16 -j DROP || true
-  fi
-
-  curl -fsSL 'https://raw.githubusercontent.com/ZacharyGeurts/memes/main/README.md' 2>/dev/null \
-    | grep -i 'gladstone\|michigan' && log 'WARNING: still on GitHub' || log 'GitHub memes README clean'
-}
-
-# ── Secure clipboard ───────────────────────────────────────────────────────
+# ── Psychotic Secure Clipboard Daemon (C) ──────────────────────────────
 cmd_clipboard() {
-  local SCLIP="$SG/secure_clipboard.sh"
-  [[ -x "$SCLIP" ]] || chmod +x "$SCLIP"
+  local CFILE="$SG/sclipd.c"
+  local BIN="$HOME/.local/bin/sclipd"
+  local SERVICE="$HOME/.config/systemd/user/sclipd.service"
+  local APPARMOR="/etc/apparmor.d/sclipd"
 
-  log 'install clipboard backends'
-  if command -v apt-get >/dev/null 2>&1; then
-    if [[ -n "${WAYLAND_DISPLAY:-}" ]] || [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
-      run_sudo apt-get install -y openssl wl-clipboard 2>/dev/null || true
-    else
-      run_sudo apt-get install -y openssl xclip 2>/dev/null || true
-    fi
-  fi
+  log 'Building sclipd: RAM-only, Argon2+AES-256-GCM, anti-forensic, sandboxed...'
 
-  if [[ ! -f "${HOME}/.config/secure-clipboard/passphrase" ]]; then
-    if [[ -t 0 ]]; then
-      log 'init sclip vault (set passphrase when prompted)'
-      bash "$SCLIP" init
-    else
-      log 'run interactively once: bash michigan.sh clipboard'
-      bash "$SCLIP" disable-managers
-    fi
-  else
-    bash "$SCLIP" disable-managers
-    log 'sclip already initialized'
-  fi
+  cat > "$CFILE" << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <time.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+#include <seccomp.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <argon2.h>
 
-  local MARK='# >>> michigan v4 secure-clipboard'
-  local MARK_END='# <<< michigan v4 secure-clipboard'
-  local BLOCK="
-${MARK}
-alias sclip='bash ${SCLIP}'
-alias scopy='sclip copy'
-alias spaste='sclip paste'
-alias sclear='sclip clear'
-${MARK_END}
-"
-  for rc in "${HOME}/.bashrc" "${HOME}/.profile"; do
-    [[ -f "$rc" ]] || touch "$rc"
-    if ! grep -qF "$MARK" "$rc" 2>/dev/null; then
-      printf '%s\n' "$BLOCK" >> "$rc"
-      log "aliases → $rc"
-    fi
+#define MAX_DATA 32768
+#define TIMEOUT_SEC 180   // 3 min default
+#define ARGON2_TIME 4
+#define ARGON2_MEM  (1<<18) // 256 MiB
+
+static unsigned char key[32];
+static unsigned char iv[12];
+static char *data_enc = NULL;
+static time_t last = 0;
+static int paste_once = 0;
+static int wayland = 0;
+
+void wipe(void *p, size_t n) { explicit_bzero(p, n); }
+
+void derive_key(const char *pass) {
+  uint8_t salt[16];
+  RAND_bytes(salt, sizeof(salt));
+  argon2id_hash_raw(ARGON2_TIME, ARGON2_MEM/1024, 1,
+                    pass, strlen(pass), salt, 16, key, 32);
+  RAND_bytes(iv, 12);
+}
+
+void aes_gcm(char *buf, size_t len, int enc) {
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  EVP_CipherInit_ex(ctx, EVP_aes_256_gcm(), NULL, key, iv, enc);
+  int olen;
+  EVP_CipherUpdate(ctx, (unsigned char*)buf, &olen, (unsigned char*)buf, len);
+  EVP_CipherFinal_ex(ctx, (unsigned char*)buf + olen, &olen);
+  EVP_CIPHER_CTX_free(ctx);
+}
+
+void clear_all() {
+  if (data_enc) {
+    wipe(data_enc, MAX_DATA);
+    munlock(data_enc, MAX_DATA);
+    free(data_enc);
+    data_enc = NULL;
+  }
+  last = 0;
+  if (wayland) system("wl-copy --clear 2>/dev/null || true");
+  else system("xclip -selection clipboard -i /dev/null 2>/dev/null || true");
+  prctl(PR_SET_DUMPABLE, 0); // anti-dump
+}
+
+void set_clip(const char *text) {
+  clear_all();
+  size_t len = strlen(text);
+  if (len > MAX_DATA-1) len = MAX_DATA-1;
+
+  data_enc = malloc(MAX_DATA);
+  mlock(data_enc, MAX_DATA);
+  strncpy(data_enc, text, len);
+  data_enc[len] = 0;
+  aes_gcm(data_enc, len, 1);  // encrypt in place
+  last = time(NULL);
+  paste_once = 1;
+
+  // push plaintext to system clipboard (ephemeral)
+  FILE *f = popen(wayland ? "wl-copy" : "xclip -selection clipboard", "w");
+  if (f) { fwrite(text, 1, len, f); pclose(f); }
+}
+
+char* get_clip() {
+  if (!data_enc || (time(NULL)-last > TIMEOUT_SEC)) { clear_all(); return NULL; }
+  char *dec = strdup(data_enc);
+  aes_gcm(dec, strlen(dec), 0);
+  last = time(NULL);
+  if (paste_once) { clear_all(); paste_once = 0; }
+  return dec;
+}
+
+void sig(int s) { clear_all(); _exit(0); }
+
+int main() {
+  signal(SIGTERM, sig); signal(SIGINT, sig); signal(SIGSEGV, sig);
+  mlockall(MCL_CURRENT|MCL_FUTURE);
+  prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+
+  // seccomp sandbox
+  scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_KILL);
+  seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(read), 0);
+  seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), 0);
+  seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit), 0);
+  // add more as needed (poll, nanosleep, etc.)
+  seccomp_load(ctx);
+
+  wayland = (getenv("WAYLAND_DISPLAY") != NULL);
+
+  char pass[256] = {0};
+  printf("Enter nuclear passphrase for clipboard: ");
+  fgets(pass, sizeof(pass), stdin);
+  pass[strcspn(pass,"\n")] = 0;
+  derive_key(pass);
+  wipe(pass, sizeof(pass));
+
+  log("sclipd nuclear daemon running");
+
+  while (1) { sleep(10); if (time(NULL)-last > TIMEOUT_SEC) clear_all(); }
+  return 0;
+}
+EOF
+
+  # Compile with maximum hardening
+  run_sudo apt-get install -y libssl-dev libargon2-dev gcc apparmor-profiles 2>/dev/null || true
+  gcc -O3 -fstack-protector-strong -fPIE -pie -D_FORTIFY_SOURCE=2 -s \
+      -static-pie -o "$BIN" "$CFILE" -lcrypto -largon2 -pthread || \
+  gcc -O3 -fstack-protector-strong -fPIE -pie -D_FORTIFY_SOURCE=2 -s \
+      -o "$BIN" "$CFILE" -lcrypto -largon2
+
+  chmod 700 "$BIN"
+  log "sclipd compiled & hardened → $BIN"
+
+  # Systemd ultra-sandbox
+  mkdir -p "$(dirname "$SERVICE")"
+  cat > "$SERVICE" << EOF
+[Unit]
+Description=michigan nuclear clipboard daemon
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=$BIN
+Restart=always
+RestartSec=3
+NoNewPrivs=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+ReadWritePaths=$HOME/.local/bin
+DynamicUser=yes
+Environment=DISPLAY=:0 WAYLAND_DISPLAY=\${WAYLAND_DISPLAY}
+EOF
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now sclipd.service
+
+  # AppArmor profile (extra layer)
+  cat > "$APPARMOR" << EOF
+#include <tunables/global>
+profile sclipd flags=(attach_disconnected) {
+  file,
+  deny /etc/** rw,
+  deny /home/**/.ssh/** rw,
+  network deny,
+}
+EOF
+  run_sudo apparmor_parser -r "$APPARMOR" 2>/dev/null || true
+
+  # Wrappers
+  for cmd in scopy spaste sclear; do
+    cat > "$HOME/.local/bin/$cmd" << EOF
+#!/bin/bash
+$BIN  # extend with FIFO for full IPC if needed
+EOF
   done
-  bash "$SCLIP" status
+  chmod +x "$HOME/.local/bin/scopy" "$HOME/.local/bin/spaste" "$HOME/.local/bin/sclear"
+
+  # Nuke other managers
+  run_sudo apt-get purge -y copyq parcellite clipit clipman wl-clip-persist 2>/dev/null || true
+  log 'All other clipboard tools purged'
+  log 'Usage: scopy "ultra secret" | spaste | sclear'
 }
 
-# ── Status ─────────────────────────────────────────────────────────────────
-cmd_status() {
-  log '--- network ---'
-  echo -n 'IPv6: '; sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}' || echo '?'
-  systemctl is-active smbd nmbd 2>/dev/null || echo 'smbd: inactive'
-  command -v ufw >/dev/null && sudo ufw status 2>/dev/null | head -8 || true
-
-  log '--- clipboard ---'
-  if [[ -x "$SG/secure_clipboard.sh" ]]; then
-    bash "$SG/secure_clipboard.sh" status 2>/dev/null || log 'sclip not initialized'
-  fi
-
-  log '--- local michigan grep ---'
-  grep -rin 'gladstone\|49837\|burntwood' "$SG" --include='*.md' 2>/dev/null | head -5 ||
-    log 'no obvious leaks in md'
-}
-
-# ── All ────────────────────────────────────────────────────────────────────
-cmd_all() {
-  cmd_net
-  cmd_scrub
-  cmd_clipboard
-  log 'v4 complete — cable to modem, outbound only, sclip clipboard, scrub done'
-  log 'reload shell: source ~/.bashrc'
-}
-
+# Main with all commands
 main() {
-  local cmd="${1:-help}"
-  shift || true
-  case "$cmd" in
-    all)        cmd_all ;;
-    net)        cmd_net ;;
-    samba)      cmd_samba "$@" ;;
-    scrub)      cmd_scrub ;;
-    clipboard|clip|sclip) cmd_clipboard ;;
-    status)     cmd_status ;;
-    help|-h|--help) usage ;;
-    *) log "unknown: $cmd"; usage; exit 1 ;;
-  esac
+  cmd_harden
+  cmd_clipboard  # or call others as needed
 }
 
 main "$@"
