@@ -3,7 +3,7 @@
 # Service cleaner · real AV · no keyloggers · HID guard · FCC · human-contact regulators · ingress clasp · secure clipboard
 set -euo pipefail
 
-AMMO_VERSION=3
+AMMO_VERSION=4
 AMMO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$AMMO_ROOT/lib/common.sh"
 
@@ -17,7 +17,8 @@ ammo.sh v${AMMO_VERSION} — SG ammosecurity (Linux)
   ./ammo.sh -Action Antivirus        ClamAV + rkhunter scan
   ./ammo.sh -Action Antivirus -Install   install AV packages first
   ./ammo.sh -Action Surveillance     kill keyloggers + HID/mouse guard
-  ./ammo.sh -Action FCC              BT/NFC off, rogue AP blocked, SDR blacklist
+  ./ammo.sh -Action FCC              Part 15: conducted voltage + radiated + modulation caps
+  ./ammo.sh -Action FCCEmissions     voltage escape + EIRP + outlaw modulator kill only
   ./ammo.sh -Action HumanContact     5V/500mA cap on mice, keyboards, headsets, touch
   ./ammo.sh -Action Clasp            extra lock: USB + Bluetooth + WiFi + NFC + WWAN
   ./ammo.sh -Action Clasp -Unlock    release ingress clasp (admin)
@@ -111,6 +112,7 @@ case "$ACTION" in
   Antivirus)  bash "$AMMO_ROOT/modules/antivirus.sh" $EXTRA ;;
   Surveillance) bash "$AMMO_ROOT/modules/anti_surveillance.sh" ;;
   FCC)        bash "$AMMO_ROOT/modules/fcc_guard.sh" ;;
+  FCCEmissions) bash "$AMMO_ROOT/modules/fcc_emissions_regulator.sh" ;;
   HumanContact) bash "$AMMO_ROOT/modules/human_contact_regulator.sh" ;;
   Clasp)      bash "$AMMO_ROOT/modules/ingress_clasp.sh" "${EXTRA:--lock}" ;;
   Clipboard)  cmd_clipboard "$EXTRA" ;;

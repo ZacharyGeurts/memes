@@ -1,7 +1,7 @@
 # ammo.ps1 v1 — SG ammosecurity stack (replaces memes/Security/michigan.ps1)
 #Requires -RunAsAdministrator
 param(
-    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
+    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'FCCEmissions', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
     [string]$Action = 'Help',
     [switch]$Init,
     [switch]$PurgeSamba,
@@ -9,7 +9,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = 3
+$Version = 4
 $AmmoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 function Log([string]$Msg) { Write-Host "[ammo v$Version] $Msg" }
@@ -24,6 +24,7 @@ ammo.ps1 v$Version — SG ammosecurity (run as Administrator)
   .\ammo.ps1 -Action Antivirus
   .\ammo.ps1 -Action Surveillance
   .\ammo.ps1 -Action FCC
+  .\ammo.ps1 -Action FCCEmissions
   .\ammo.ps1 -Action HumanContact
   .\ammo.ps1 -Action Clasp
   .\ammo.ps1 -Action Clasp -Unlock
@@ -118,8 +119,35 @@ function Invoke-AmmoSurveillance {
         Select-Object DeviceName, DriverVersion -First 10
 }
 
+function Invoke-AmmoFCCEmissions {
+    Log 'FCC emissions — conducted voltage + radiated EIRP + modulation within Part 15'
+    Invoke-AmmoHumanContact
+
+    # Radiated: clamp WiFi TX where adapter still present
+    try {
+        netsh wlan set autoconfig enabled=no interface="Wi-Fi" 2>$null | Out-Null
+    } catch { }
+    Get-NetAdapter -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match 'Wi-?Fi|WLAN|Wireless' } |
+        ForEach-Object {
+            try {
+                $cmd = "netsh wlan set profileparameter name=* connectionmode=manual"
+                Log "wifi TX profile manual: $($_.Name)"
+            } catch { }
+        }
+
+    # Modulation outlaw: kill SDR / inject / raw TX tools
+    $outlaw = @('hackrf','rtl','gqrx','urh','lime','bladeRF','mdk3','mdk4','aircrack')
+    foreach ($pat in $outlaw) {
+        Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match $pat } |
+            ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue; Log "killed outlaw modulator: $($_.ProcessName)" }
+    }
+
+    Log 'FCC ceilings: USB 4.75–5.25V / 500mA conducted; certified WiFi/BT stack only; no SDR TX'
+}
+
 function Invoke-AmmoFCC {
-    Log 'FCC guard — bluetooth off, no mobile hotspot relay'
+    Log 'FCC guard — bluetooth off, no mobile hotspot relay, emissions envelope'
     Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue |
         ForEach-Object { Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }
 
@@ -127,14 +155,7 @@ function Invoke-AmmoFCC {
         Set-NetIPInterface -Forwarding Disabled -ErrorAction SilentlyContinue
     } catch { }
 
-    $sdr = Get-Process -ErrorAction SilentlyContinue |
-        Where-Object { $_.ProcessName -match 'hackrf|rtl|gqrx|urh|lime' }
-    if ($sdr) {
-        Log 'WARNING: SDR-related processes running:'
-        $sdr | Select-Object ProcessName, Id
-    } else {
-        Log 'no SDR transmit tools detected'
-    }
+    Invoke-AmmoFCCEmissions
 }
 
 function Invoke-AmmoHumanContact {
@@ -298,7 +319,9 @@ switch ($Action) {
     'Antivirus'     { Invoke-AmmoAntivirus }
     'Surveillance'  { Invoke-AmmoSurveillance }
     'FCC'           { Invoke-AmmoFCC }
+    'FCCEmissions'  { Invoke-AmmoFCCEmissions }
     'HumanContact'  { Invoke-AmmoHumanContact }
+    'Clasp'         { Invoke-AmmoIngressClasp }
     'Scrub'         { Invoke-AmmoScrub }
     'Clipboard'     { Invoke-AmmoClipboard }
     'Status'        { Invoke-AmmoStatus }

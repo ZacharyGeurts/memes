@@ -9,7 +9,8 @@ $map = @{
     'All' = 'All'; 'Net' = 'Net'; 'Samba' = 'Net'; 'Scrub' = 'Scrub'
     'Clipboard' = 'Clipboard'; 'Status' = 'Status'; 'Help' = 'Help'
     'Services' = 'Services'; 'Antivirus' = 'Antivirus'
-    'Surveillance' = 'Surveillance'; 'FCC' = 'FCC'; 'HumanContact' = 'HumanContact'; 'Clasp' = 'Clasp'
+    'Surveillance' = 'Surveillance'; 'FCC' = 'FCC'; 'FCCEmissions' = 'FCCEmissions'
+    'HumanContact' = 'HumanContact'; 'Clasp' = 'Clasp'
 }
 $mapped = if ($map.ContainsKey($Action)) { $map[$Action] } else { $Action }
 & "$Dir\ammo.ps1" -Action $mapped @PSBoundParameters
