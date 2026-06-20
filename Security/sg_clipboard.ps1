@@ -35,7 +35,7 @@ function Get-SClipPassphrase {
         try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
     }
-    throw 'No passphrase file. Run: ammo.ps1 -Action Clipboard -Init'
+    throw 'No passphrase file. Run: sg_build.ps1 -Action Clipboard -Init'
 }
 
 function Save-SClipPassphrase([string]$Plain) {

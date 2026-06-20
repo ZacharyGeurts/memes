@@ -30,7 +30,7 @@ cmd_conducted_emissions() {
   ammo_log 'FCC conducted emissions — voltage escape clamp (USB bus)'
   # Reuse human-contact regulator ceiling (5 V / 500 mA)
   local mod
-  mod="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/human_contact_regulator.sh"
+  mod="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sg_human_contact.sh"
   if [[ -f "$mod" ]]; then
     bash "$mod" 2>/dev/null || true
   fi
@@ -137,7 +137,7 @@ cmd_fcc_audit() {
   Radiated (2.4 GHz):  ≤${FCC_WIFI_DBM_MAX} dBm EIRP software cap
   Modulation:          DSSS/OFDM via certified stack only; no SDR TX, no monitor/inject
   Dead air:            no rapid power/RF fluctuation encoding; idle = silence
-  Ingress clasp:       USB/BT/WiFi locked when ammo -Action All applied
+  Ingress clasp:       USB/BT/WiFi locked when sg_build -Action All applied
   Physical:            ferrite on USB cables; shielded enclosure for switching supplies
 EOF
 }
@@ -148,7 +148,7 @@ cmd_fcc_emissions_regulator() {
   cmd_radiated_emissions
   cmd_modulation_guard
   local dead_air
-  dead_air="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dead_air_regulator.sh"
+  dead_air="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sg_dead_air.sh"
   [[ -f "$dead_air" ]] && bash "$dead_air" || true
   cmd_fcc_audit
   ammo_log 'FCC emissions envelope enforced — stable rails, dead air, no encoded fluctuation'

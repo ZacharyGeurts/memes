@@ -69,7 +69,7 @@ cmd_fcc_guard() {
   cmd_sdr_sweep
   cmd_modprobe_blacklist
   local emissions
-  emissions="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fcc_emissions_regulator.sh"
+  emissions="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sg_fcc_emissions.sh"
   [[ -f "$emissions" ]] && bash "$emissions" || true
   ammo_log 'FCC guard pass complete — no outlaw BT/NFC/AP relay + emissions envelope'
 }

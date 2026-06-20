@@ -171,7 +171,7 @@ cmd_ingress_clasp() {
   cmd_clasp_wifi
   cmd_clasp_other
   date -Is 2>/dev/null | ammo_sudo tee "$CLASP_STATE" >/dev/null || ammo_sudo sh -c "date > $CLASP_STATE"
-  ammo_log 'ingress clasp LOCKED — use: ammo.sh -Action Clasp -Unlock to release'
+  ammo_log 'ingress clasp LOCKED — use: sg_build.sh -Action Clasp -Unlock to release'
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

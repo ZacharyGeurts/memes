@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# secure_clipboard.sh — RAM-only, auto-wipe, no history. Not a cloud clipboard manager.
+# sg_clipboard.sh — RAM-only, auto-wipe, no history. Trust nobody cloud clipboards.
 set -euo pipefail
 
 # Tunables (override in ~/.config/secure-clipboard/env)
@@ -32,7 +32,7 @@ Security model:
   - Plaintext only (no images/files — less leak surface)
 
 Shell aliases (add to ~/.bashrc):
-  alias sclip='bash /path/to/memes/Security/secure_clipboard.sh'
+  alias sclip='bash ~/Desktop/SG/ammosecurity/sg_clipboard.sh'
   alias scopy='sclip copy'
   alias spaste='sclip paste'
   alias sclear='sclip clear'

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 AMMO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCLIP="${AMMO_ROOT}/secure_clipboard.sh"
-MARK="# >>> ammosecurity secure-clipboard"
-MARK_END="# <<< ammosecurity secure-clipboard"
+SG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCLIP="${SG_ROOT}/sg_clipboard.sh"
+MARK="# >>> sg_build clipboard"
+MARK_END="# <<< sg_build clipboard"
 
 chmod +x "${SCLIP}"
 
