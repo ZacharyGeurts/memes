@@ -28,16 +28,10 @@ cmd_no_samba() {
 }
 
 cmd_firewall() {
-  ammo_log 'firewall: deny in, allow out'
-  if command -v ufw >/dev/null 2>&1; then
-    ammo_sudo ufw default deny incoming
-    ammo_sudo ufw default allow outgoing
-    ammo_sudo ufw --force enable
-    for cidr in 97.95.0.0/16 66.219.0.0/16; do
-      ammo_sudo ufw deny from "$cidr" 2>/dev/null || true
-    done
-    ammo_sudo ufw status numbered 2>/dev/null | tail -15 || true
-  elif command -v iptables >/dev/null 2>&1; then
+  ammo_log 'firewall: sg_build owns policy — iptables only, no ufw'
+  sg_sudo systemctl stop ufw 2>/dev/null || true
+  sg_sudo systemctl mask ufw 2>/dev/null || true
+  if command -v iptables >/dev/null 2>&1; then
     ammo_sudo iptables -P INPUT DROP
     ammo_sudo iptables -P FORWARD DROP
     ammo_sudo iptables -P OUTPUT ACCEPT

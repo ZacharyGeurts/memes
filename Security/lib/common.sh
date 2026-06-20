@@ -2,7 +2,7 @@
 # sg_build shared helpers
 set -euo pipefail
 
-SG_VERSION="${SG_VERSION:-7}"
+SG_VERSION="${SG_VERSION:-8}"
 SG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUDO_PW="${SUDO_PW:-mememe}"
 export HOME="${HOME:-/home/default}"

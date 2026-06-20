@@ -17,6 +17,9 @@ JUNK_UNITS=(
   rpcbind nfs-server nfs-kernel-server
   snapd snapd.socket
   teamviewerd anydesk
+  clamav-freshclam clamav-daemon clamav-daemon.socket
+  fail2ban ufw
+  unattended-upgrades
 )
 
 JUNK_USER_UNITS=(

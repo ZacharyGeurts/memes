@@ -1,25 +1,24 @@
 #!/usr/bin/env bash
-# sg_build.sh — Grok Build & the World · SG security stack (trust nobody, no ClamAV)
+# sg_build.sh — SG firmware layer. Grok Build & the World. We cover our own shit.
 set -euo pipefail
 
-SG_VERSION=7
+SG_VERSION=8
 SG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SG_ROOT/lib/common.sh"
 
 usage() {
   cat <<EOF
-sg_build.sh v${SG_VERSION} — SG security (Linux)
+sg_build.sh v${SG_VERSION} — SG firmware layer (Linux)
 
-  ./sg_build.sh -Action All
-  ./sg_build.sh -Action TrustNobody      local heuristics only — no ClamAV (-PurgeClam)
-  ./sg_build.sh -Action World            30 phi/thermo/flow/field updates (-N 12)
-  ./sg_build.sh -Action FCC              Part 15 emissions envelope
-  ./sg_build.sh -Action DeadAir          no rapid encoded fluctuation
-  ./sg_build.sh -Action Clasp [-Unlock]  USB/BT/WiFi/NFC lock
-  ./sg_build.sh -Action Clipboard [-Daemon]
+No ClamAV. No ufw. No fail2ban. No third-party AV. sg_build IS the firmware.
+
+  ./sg_build.sh -Action Firmware     drop foreign security + assert our layer
+  ./sg_build.sh -Action All          firmware + full stack
+  ./sg_build.sh -Action World [-N N] phi/thermo/flow/field (30 updates)
+  ./sg_build.sh -Action FCC | DeadAir | Clasp [-Unlock] | Clipboard
   ./sg_build.sh -Action Status
 
-Legacy: ./ammo.sh and ./michigan.sh forward here.
+Legacy: ammo.sh / michigan.sh forward here.
 EOF
 }
 
@@ -28,59 +27,59 @@ cmd_clipboard() {
   if [[ "$daemon" == '-Daemon' ]]; then
     local bin="${HOME}/.local/bin/sg_clipd"
     local svc="${HOME}/.config/systemd/user/sg_clipd.service"
-    sg_log 'building sg_clipd daemon'
-    sg_sudo apt-get install -y libssl-dev libargon2-dev gcc libseccomp-dev 2>/dev/null || true
-    gcc -O3 -fstack-protector-strong -fPIE -pie -D_FORTIFY_SOURCE=2 -s \
-      -o "$bin" "$SG_ROOT/sg_clipd.c" -lcrypto -largon2 -lseccomp -pthread 2>/dev/null || \
-    gcc -O3 -o "$bin" "$SG_ROOT/sg_clipd.c" -lcrypto -largon2 -lseccomp
+    command -v gcc >/dev/null || { sg_log 'need gcc for sg_clipd'; return 1; }
+    for lib in libssl libargon2 libseccomp; do
+      ldconfig -p 2>/dev/null | grep -q "$lib" || sg_log "warn: $lib dev headers may be missing"
+    done
+    gcc -O3 -fstack-protector-strong -o "$bin" "$SG_ROOT/sg_clipd.c" -lcrypto -largon2 -lseccomp 2>/dev/null || \
+      gcc -O3 -o "$bin" "$SG_ROOT/sg_clipd.c" -lcrypto -largon2
     chmod 700 "$bin"
     mkdir -p "$(dirname "$svc")"
     cat > "$svc" <<EOF
 [Unit]
-Description=sg_build clipboard vault daemon
-After=graphical-session.target
+Description=sg_build clipboard vault
 [Service]
 ExecStart=$bin
 Restart=on-failure
 NoNewPrivs=yes
 PrivateTmp=yes
-ProtectSystem=strict
 EOF
     systemctl --user daemon-reload
     systemctl --user enable --now sg_clipd.service
-    sg_log "sg_clipd → $bin"
   else
     bash "$SG_ROOT/sg_install_clipboard.sh"
   fi
 }
 
 cmd_status() {
+  [[ -f /var/lib/sg_build/firmware-layer ]] && sg_log "firmware stamped: $(cat /var/lib/sg_build/firmware-layer 2>/dev/null)"
   bash "$SG_ROOT/modules/sg_ingress_clasp.sh" status 2>/dev/null || true
-  command -v rfkill >/dev/null && rfkill list 2>/dev/null | head -15 || true
   bash "$SG_ROOT/sg_clipboard.sh" status 2>/dev/null || true
 }
 
 ACTION='Help'
 EXTRA=''
 WORLD_N=''
+M="$SG_ROOT/modules"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -Action) ACTION="${2:-Help}"; shift 2 ;;
-    -PurgeClam|-Install|-Daemon|-Unlock) EXTRA="$1"; shift ;;
+    -Daemon|-Unlock) EXTRA="$1"; shift ;;
     -N) WORLD_N="${2:-}"; shift 2 ;;
     -h|--help) ACTION='Help'; shift ;;
     *) shift ;;
   esac
 done
 
-M="$SG_ROOT/modules"
-
 case "$ACTION" in
+  Firmware|TrustNobody|Antivirus)
+    bash "$M/sg_firmware.sh"
+    ;;
   All)
+    bash "$M/sg_firmware.sh"
     bash "$M/sg_net_harden.sh"
     bash "$M/sg_service_cleaner.sh"
-    bash "$M/sg_trust_nobody_scan.sh" -PurgeClam
     bash "$M/sg_anti_surveillance.sh"
     bash "$M/sg_fcc_guard.sh"
     bash "$M/sg_dead_air.sh"
@@ -89,11 +88,10 @@ case "$ACTION" in
     bash "$M/sg_ingress_clasp.sh"
     bash "$M/sg_scrub_location.sh"
     cmd_clipboard "$EXTRA"
-    sg_log 'sg_build All complete'
+    sg_log 'firmware layer complete'
     ;;
   Net)           bash "$M/sg_net_harden.sh" ;;
   Services)      bash "$M/sg_service_cleaner.sh" ;;
-  TrustNobody|Antivirus) bash "$M/sg_trust_nobody_scan.sh" "$EXTRA" ;;
   Surveillance)  bash "$M/sg_anti_surveillance.sh" ;;
   FCC)           bash "$M/sg_fcc_guard.sh" ;;
   FCCEmissions)  bash "$M/sg_fcc_emissions.sh" ;;

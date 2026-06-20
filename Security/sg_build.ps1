@@ -1,7 +1,7 @@
-# sg_build.ps1 v1 — SG sg_build stack (replaces memes/Security/michigan.ps1)
+# sg_build.ps1 — SG firmware layer. We cover our own shit.
 #Requires -RunAsAdministrator
 param(
-    [ValidateSet('All', 'Net', 'Services', 'TrustNobody','Antivirus', 'Surveillance', 'FCC', 'FCCEmissions', 'DeadAir', 'World', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
+    [ValidateSet('All', 'Firmware', 'TrustNobody', 'Antivirus', 'Net', 'Services', 'Surveillance', 'FCC', 'FCCEmissions', 'DeadAir', 'World', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
     [int]$N = 0
     [string]$Action = 'Help',
     [switch]$Init,
@@ -10,19 +10,19 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = 7
+$Version = 8
 $SgRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 function Log([string]$Msg) { Write-Host "[sg_build v$Version] $Msg" }
 
 function Show-Help {
     @"
-sg_build.ps1 v$Version — SG sg_build (run as Administrator)
+sg_build.ps1 v$Version — SG firmware layer (Administrator)
 
+  .\sg_build.ps1 -Action Firmware   drop foreign AV/security — we own the stack
   .\sg_build.ps1 -Action All
   .\sg_build.ps1 -Action Net
   .\sg_build.ps1 -Action Services
-  .\sg_build.ps1 -Action TrustNobody
   .\sg_build.ps1 -Action Surveillance
   .\sg_build.ps1 -Action FCC
   .\sg_build.ps1 -Action FCCEmissions
@@ -336,7 +336,7 @@ switch ($Action) {
     'All' {
         Invoke-AmmoNet
         Invoke-AmmoServices
-        Invoke-SGTrustNobody
+        . "$SgRoot\modules\sg_firmware.ps1"; Invoke-SGFirmware
         Invoke-AmmoSurveillance
         Invoke-AmmoFCC
         Invoke-AmmoHumanContact
@@ -350,8 +350,9 @@ switch ($Action) {
     }
     'Net'           { Invoke-AmmoNet }
     'Services'      { Invoke-AmmoServices }
-    'TrustNobody'   { Invoke-SGTrustNobody }
-    'Antivirus'     { Invoke-SGTrustNobody }
+    'Firmware'      { . "$SgRoot\modules\sg_firmware.ps1"; Invoke-SGFirmware }
+    'TrustNobody'   { . "$SgRoot\modules\sg_firmware.ps1"; Invoke-SGFirmware }
+    'Antivirus'     { . "$SgRoot\modules\sg_firmware.ps1"; Invoke-SGFirmware }
     'Surveillance'  { Invoke-AmmoSurveillance }
     'FCC'           { Invoke-AmmoFCC }
     'FCCEmissions'  { Invoke-AmmoFCCEmissions }
