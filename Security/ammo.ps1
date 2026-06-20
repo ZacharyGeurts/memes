@@ -1,14 +1,15 @@
 # ammo.ps1 v1 — SG ammosecurity stack (replaces memes/Security/michigan.ps1)
 #Requires -RunAsAdministrator
 param(
-    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'HumanContact', 'Scrub', 'Clipboard', 'Status', 'Help')]
+    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
     [string]$Action = 'Help',
     [switch]$Init,
-    [switch]$PurgeSamba
+    [switch]$PurgeSamba,
+    [switch]$Unlock
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = 2
+$Version = 3
 $AmmoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 function Log([string]$Msg) { Write-Host "[ammo v$Version] $Msg" }
@@ -24,6 +25,8 @@ ammo.ps1 v$Version — SG ammosecurity (run as Administrator)
   .\ammo.ps1 -Action Surveillance
   .\ammo.ps1 -Action FCC
   .\ammo.ps1 -Action HumanContact
+  .\ammo.ps1 -Action Clasp
+  .\ammo.ps1 -Action Clasp -Unlock
   .\ammo.ps1 -Action Scrub
   .\ammo.ps1 -Action Clipboard [-Init]
   .\ammo.ps1 -Action Status
@@ -160,6 +163,58 @@ function Invoke-AmmoHumanContact {
     Log 'physical: inline 5V LDO on any DIY cable or wearable touching skin'
 }
 
+function Invoke-AmmoIngressClasp {
+    if ($Unlock) {
+        Log 'UNLOCK ingress clasp — re-enabling USB / Bluetooth / WiFi'
+        Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+            Where-Object { $_.Class -match 'Bluetooth|Net|USB' } |
+            ForEach-Object { Enable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }
+        try {
+            netsh interface set interface name="Wi-Fi" admin=enabled 2>$null | Out-Null
+            Set-NetAdapter -Name 'Wi-Fi' -Status Up -ErrorAction SilentlyContinue
+        } catch { }
+        Remove-Item -Path 'HKLM:\SOFTWARE\Ammo\IngressClasp' -Recurse -Force -ErrorAction SilentlyContinue
+        Log 'clasp released — reboot recommended'
+        return
+    }
+
+    Log '=== INGRESS CLASP — USB · Bluetooth · WiFi · NFC · WWAN ==='
+
+    # USB clasp — disable new USB device install
+    $usbStor = 'HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR'
+    if (Test-Path $usbStor) {
+        Set-ItemProperty -Path $usbStor -Name Start -Type DWord -Value 4 -ErrorAction SilentlyContinue
+        Log 'USB storage driver disabled (Start=4)'
+    }
+
+    # Bluetooth clasp
+    Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue |
+        ForEach-Object { Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }
+    Get-Service -Name 'bthserv','BluetoothUserService*' -ErrorAction SilentlyContinue |
+        ForEach-Object { Stop-Service $_ -Force -ErrorAction SilentlyContinue; Set-Service $_.Name -StartupType Disabled -ErrorAction SilentlyContinue }
+
+    # WiFi clasp
+    try {
+        netsh wlan set hostednetwork mode=disallow 2>$null | Out-Null
+        netsh interface set interface name="Wi-Fi" admin=disabled 2>$null | Out-Null
+    } catch { }
+    Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+        Where-Object { $_.MediaType -match '802.11' -or $_.Name -match 'Wi-?Fi|WLAN|Wireless' } |
+        ForEach-Object { Disable-NetAdapter -Name $_.Name -Confirm:$false -ErrorAction SilentlyContinue; Log "wifi down: $($_.Name)" }
+
+    # Mobile hotspot / tethering clasp
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\WcmSvc\GroupPolicy\fHotspotReporting' `
+        -Name fEnableHotspotReporting -Type DWord -Value 0 -ErrorAction SilentlyContinue
+
+    # NFC if present
+    Get-PnpDevice -FriendlyName '*NFC*' -ErrorAction SilentlyContinue |
+        ForEach-Object { Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }
+
+    New-Item -Path 'HKLM:\SOFTWARE\Ammo\IngressClasp' -Force | Out-Null
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Ammo\IngressClasp' -Name LockedAt -Value (Get-Date -Format o)
+    Log 'ingress clasp LOCKED — ethernet outbound only; use -Action Clasp -Unlock to release'
+}
+
 function Invoke-AmmoScrub {
     $SG = Split-Path $AmmoRoot -Parent
     Log "scrub location metadata under $SG"
@@ -233,6 +288,7 @@ switch ($Action) {
         Invoke-AmmoSurveillance
         Invoke-AmmoFCC
         Invoke-AmmoHumanContact
+        Invoke-AmmoIngressClasp
         Invoke-AmmoScrub
         Invoke-AmmoClipboard
         Log 'All complete — reload PowerShell profile for scopy/spaste/sclear'

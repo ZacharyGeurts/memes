@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ammo.sh — SG ammosecurity stack (replaces memes/Security/michigan.sh)
-# Service cleaner · real AV · no keyloggers · HID guard · FCC RF lockdown · human-contact voltage regulators · secure clipboard
+# Service cleaner · real AV · no keyloggers · HID guard · FCC · human-contact regulators · ingress clasp · secure clipboard
 set -euo pipefail
 
-AMMO_VERSION=2
+AMMO_VERSION=3
 AMMO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$AMMO_ROOT/lib/common.sh"
 
@@ -19,6 +19,8 @@ ammo.sh v${AMMO_VERSION} — SG ammosecurity (Linux)
   ./ammo.sh -Action Surveillance     kill keyloggers + HID/mouse guard
   ./ammo.sh -Action FCC              BT/NFC off, rogue AP blocked, SDR blacklist
   ./ammo.sh -Action HumanContact     5V/500mA cap on mice, keyboards, headsets, touch
+  ./ammo.sh -Action Clasp            extra lock: USB + Bluetooth + WiFi + NFC + WWAN
+  ./ammo.sh -Action Clasp -Unlock    release ingress clasp (admin)
   ./ammo.sh -Action Clipboard        secure clipboard (bash vault)
   ./ammo.sh -Action Clipboard -Daemon   build + run sclipd C daemon
   ./ammo.sh -Action Scrub            remove location metadata leaks
@@ -69,6 +71,8 @@ cmd_status() {
   systemctl is-active smbd nmbd 2>/dev/null || true
   ammo_log '--- firewall ---'
   command -v ufw >/dev/null && ufw status 2>/dev/null | head -5 || true
+  ammo_log '--- ingress clasp ---'
+  bash "$AMMO_ROOT/modules/ingress_clasp.sh" status 2>/dev/null || true
   ammo_log '--- rfkill ---'
   command -v rfkill >/dev/null && rfkill list 2>/dev/null | head -20 || true
   ammo_log '--- human-contact USB ---'
@@ -83,7 +87,7 @@ EXTRA=''
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -Action) ACTION="${2:-Help}"; shift 2 ;;
-    -Install|-Daemon) EXTRA="$1"; shift ;;
+    -Install|-Daemon|-Unlock) EXTRA="$1"; shift ;;
     -h|--help) ACTION='Help'; shift ;;
     *) shift ;;
   esac
@@ -97,6 +101,7 @@ case "$ACTION" in
     bash "$AMMO_ROOT/modules/anti_surveillance.sh"
     bash "$AMMO_ROOT/modules/fcc_guard.sh"
     bash "$AMMO_ROOT/modules/human_contact_regulator.sh"
+    bash "$AMMO_ROOT/modules/ingress_clasp.sh"
     bash "$AMMO_ROOT/modules/scrub_location.sh"
     cmd_clipboard "$EXTRA"
     ammo_log 'All complete — reload shell for scopy/spaste/sclear'
@@ -107,6 +112,7 @@ case "$ACTION" in
   Surveillance) bash "$AMMO_ROOT/modules/anti_surveillance.sh" ;;
   FCC)        bash "$AMMO_ROOT/modules/fcc_guard.sh" ;;
   HumanContact) bash "$AMMO_ROOT/modules/human_contact_regulator.sh" ;;
+  Clasp)      bash "$AMMO_ROOT/modules/ingress_clasp.sh" "${EXTRA:--lock}" ;;
   Clipboard)  cmd_clipboard "$EXTRA" ;;
   Scrub)      bash "$AMMO_ROOT/modules/scrub_location.sh" ;;
   Status)     cmd_status ;;
