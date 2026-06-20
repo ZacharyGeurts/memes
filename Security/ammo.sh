@@ -20,6 +20,8 @@ ammo.sh v${AMMO_VERSION} — SG ammosecurity (Linux)
   ./ammo.sh -Action FCC              Part 15: conducted voltage + radiated + modulation caps
   ./ammo.sh -Action FCCEmissions     voltage escape + EIRP + outlaw modulator kill only
   ./ammo.sh -Action DeadAir          no rapid encoded fluctuation; silence out-of-function
+  ./ammo.sh -Action World            30 updates: phi · thermo · flow · field desktop clean
+  ./ammo.sh -Action World -N 12      run single world update (1-30)
   ./ammo.sh -Action HumanContact     5V/500mA cap on mice, keyboards, headsets, touch
   ./ammo.sh -Action Clasp            extra lock: USB + Bluetooth + WiFi + NFC + WWAN
   ./ammo.sh -Action Clasp -Unlock    release ingress clasp (admin)
@@ -104,6 +106,7 @@ case "$ACTION" in
     bash "$AMMO_ROOT/modules/anti_surveillance.sh"
     bash "$AMMO_ROOT/modules/fcc_guard.sh"
     bash "$AMMO_ROOT/modules/dead_air_regulator.sh"
+    bash "$AMMO_ROOT/modules/grok_world.sh" all
     bash "$AMMO_ROOT/modules/human_contact_regulator.sh"
     bash "$AMMO_ROOT/modules/ingress_clasp.sh"
     bash "$AMMO_ROOT/modules/scrub_location.sh"
@@ -117,6 +120,7 @@ case "$ACTION" in
   FCC)        bash "$AMMO_ROOT/modules/fcc_guard.sh" ;;
   FCCEmissions) bash "$AMMO_ROOT/modules/fcc_emissions_regulator.sh" ;;
   DeadAir)    bash "$AMMO_ROOT/modules/dead_air_regulator.sh" ;;
+  World)      bash "$AMMO_ROOT/modules/grok_world.sh" "${WORLD_N:-all}" ;;
   HumanContact) bash "$AMMO_ROOT/modules/human_contact_regulator.sh" ;;
   Clasp)      bash "$AMMO_ROOT/modules/ingress_clasp.sh" "${EXTRA:--lock}" ;;
   Clipboard)  cmd_clipboard "$EXTRA" ;;
