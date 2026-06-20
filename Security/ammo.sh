@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ammo.sh — SG ammosecurity stack (replaces memes/Security/michigan.sh)
-# Service cleaner · real AV · no keyloggers · HID guard · FCC · human-contact regulators · ingress clasp · secure clipboard
+# Grok Build & the World — phi/thermo/flow desktop clean + full ammosecurity stack
 set -euo pipefail
 
-AMMO_VERSION=5
+AMMO_VERSION=6
 AMMO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$AMMO_ROOT/lib/common.sh"
 
@@ -90,6 +90,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -Action) ACTION="${2:-Help}"; shift 2 ;;
     -Install|-Daemon|-Unlock) EXTRA="$1"; shift ;;
+    -N) EXTRA="-N"; WORLD_N="${2:-}"; shift 2 ;;
     -h|--help) ACTION='Help'; shift ;;
     *) shift ;;
   esac

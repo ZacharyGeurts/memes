@@ -1,7 +1,8 @@
 # ammo.ps1 v1 — SG ammosecurity stack (replaces memes/Security/michigan.ps1)
 #Requires -RunAsAdministrator
 param(
-    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'FCCEmissions', 'DeadAir', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
+    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'FCCEmissions', 'DeadAir', 'World', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
+    [int]$N = 0
     [string]$Action = 'Help',
     [switch]$Init,
     [switch]$PurgeSamba,
@@ -9,7 +10,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = 5
+$Version = 6
 $AmmoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 function Log([string]$Msg) { Write-Host "[ammo v$Version] $Msg" }
@@ -26,6 +27,8 @@ ammo.ps1 v$Version — SG ammosecurity (run as Administrator)
   .\ammo.ps1 -Action FCC
   .\ammo.ps1 -Action FCCEmissions
   .\ammo.ps1 -Action DeadAir
+  .\ammo.ps1 -Action World
+  .\ammo.ps1 -Action World -N 12
   .\ammo.ps1 -Action HumanContact
   .\ammo.ps1 -Action Clasp
   .\ammo.ps1 -Action Clasp -Unlock
@@ -339,6 +342,8 @@ switch ($Action) {
         Invoke-AmmoFCC
         Invoke-AmmoHumanContact
         Invoke-AmmoDeadAir
+        . "$AmmoRoot\modules\grok_world.ps1"
+        Invoke-GrokWorld $(if ($N -gt 0) { "$N" } else { 'all' })
         Invoke-AmmoIngressClasp
         Invoke-AmmoScrub
         Invoke-AmmoClipboard
