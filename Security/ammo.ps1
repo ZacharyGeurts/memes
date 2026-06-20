@@ -1,14 +1,14 @@
 # ammo.ps1 v1 — SG ammosecurity stack (replaces memes/Security/michigan.ps1)
 #Requires -RunAsAdministrator
 param(
-    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'Scrub', 'Clipboard', 'Status', 'Help')]
+    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'HumanContact', 'Scrub', 'Clipboard', 'Status', 'Help')]
     [string]$Action = 'Help',
     [switch]$Init,
     [switch]$PurgeSamba
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = 1
+$Version = 2
 $AmmoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 function Log([string]$Msg) { Write-Host "[ammo v$Version] $Msg" }
@@ -23,6 +23,7 @@ ammo.ps1 v$Version — SG ammosecurity (run as Administrator)
   .\ammo.ps1 -Action Antivirus
   .\ammo.ps1 -Action Surveillance
   .\ammo.ps1 -Action FCC
+  .\ammo.ps1 -Action HumanContact
   .\ammo.ps1 -Action Scrub
   .\ammo.ps1 -Action Clipboard [-Init]
   .\ammo.ps1 -Action Status
@@ -133,6 +134,32 @@ function Invoke-AmmoFCC {
     }
 }
 
+function Invoke-AmmoHumanContact {
+    Log 'human-contact voltage regulators — 5V / 500mA ceiling on HID, audio, gamepads'
+    # USB selective suspend + power saving on human-touch device classes
+    try {
+        powercfg /SETACVALUEINDEX SCHEME_CURRENT SUB_USB USBSELECTIVESUSPEND 1 2>$null | Out-Null
+        powercfg /SETDCVALUEINDEX SCHEME_CURRENT SUB_USB USBSELECTIVESUSPEND 1 2>$null | Out-Null
+        powercfg /SETACTIVE SCHEME_CURRENT 2>$null | Out-Null
+        Log 'USB selective suspend enabled (blocks idle high-draw PD)'
+    } catch { Log 'powercfg USB suspend skipped' }
+
+    $usbFlags = 'HKLM:\SYSTEM\CurrentControlSet\Control\UsbFlags'
+    if (-not (Test-Path $usbFlags)) { New-Item -Path $usbFlags -Force | Out-Null }
+    # Disable USB3 link power management bypass (reduces voltage ramp on wake)
+    Set-ItemProperty -Path $usbFlags -Name 'fid_D1Latency' -Type DWord -Value 0 -ErrorAction SilentlyContinue
+
+    Log 'audit human-contact USB devices (keyboards, mice, headsets, controllers)'
+    Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Class -match 'HIDClass|Mouse|Keyboard|AudioEndpoint|USB|Bluetooth' -or
+            $_.FriendlyName -match 'keyboard|mouse|headset|game|controller|touch|stylus|pen'
+        } |
+        Select-Object Class, FriendlyName, Status -First 20
+
+    Log 'physical: inline 5V LDO on any DIY cable or wearable touching skin'
+}
+
 function Invoke-AmmoScrub {
     $SG = Split-Path $AmmoRoot -Parent
     Log "scrub location metadata under $SG"
@@ -205,6 +232,7 @@ switch ($Action) {
         Invoke-AmmoAntivirus
         Invoke-AmmoSurveillance
         Invoke-AmmoFCC
+        Invoke-AmmoHumanContact
         Invoke-AmmoScrub
         Invoke-AmmoClipboard
         Log 'All complete — reload PowerShell profile for scopy/spaste/sclear'
@@ -214,6 +242,7 @@ switch ($Action) {
     'Antivirus'     { Invoke-AmmoAntivirus }
     'Surveillance'  { Invoke-AmmoSurveillance }
     'FCC'           { Invoke-AmmoFCC }
+    'HumanContact'  { Invoke-AmmoHumanContact }
     'Scrub'         { Invoke-AmmoScrub }
     'Clipboard'     { Invoke-AmmoClipboard }
     'Status'        { Invoke-AmmoStatus }

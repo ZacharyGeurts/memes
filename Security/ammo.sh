@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ammo.sh — SG ammosecurity stack (replaces memes/Security/michigan.sh)
-# Service cleaner · real AV · no keyloggers · HID guard · FCC RF lockdown · net harden · secure clipboard
+# Service cleaner · real AV · no keyloggers · HID guard · FCC RF lockdown · human-contact voltage regulators · secure clipboard
 set -euo pipefail
 
-AMMO_VERSION=1
+AMMO_VERSION=2
 AMMO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$AMMO_ROOT/lib/common.sh"
 
@@ -18,6 +18,7 @@ ammo.sh v${AMMO_VERSION} — SG ammosecurity (Linux)
   ./ammo.sh -Action Antivirus -Install   install AV packages first
   ./ammo.sh -Action Surveillance     kill keyloggers + HID/mouse guard
   ./ammo.sh -Action FCC              BT/NFC off, rogue AP blocked, SDR blacklist
+  ./ammo.sh -Action HumanContact     5V/500mA cap on mice, keyboards, headsets, touch
   ./ammo.sh -Action Clipboard        secure clipboard (bash vault)
   ./ammo.sh -Action Clipboard -Daemon   build + run sclipd C daemon
   ./ammo.sh -Action Scrub            remove location metadata leaks
@@ -70,6 +71,8 @@ cmd_status() {
   command -v ufw >/dev/null && ufw status 2>/dev/null | head -5 || true
   ammo_log '--- rfkill ---'
   command -v rfkill >/dev/null && rfkill list 2>/dev/null | head -20 || true
+  ammo_log '--- human-contact USB ---'
+  lsusb 2>/dev/null | grep -iE 'keyboard|mouse|headset|audio|touch|controller' | head -8 || true
   ammo_log '--- clipboard ---'
   bash "$AMMO_ROOT/secure_clipboard.sh" status 2>/dev/null || true
 }
@@ -93,6 +96,7 @@ case "$ACTION" in
     bash "$AMMO_ROOT/modules/antivirus.sh" $EXTRA
     bash "$AMMO_ROOT/modules/anti_surveillance.sh"
     bash "$AMMO_ROOT/modules/fcc_guard.sh"
+    bash "$AMMO_ROOT/modules/human_contact_regulator.sh"
     bash "$AMMO_ROOT/modules/scrub_location.sh"
     cmd_clipboard "$EXTRA"
     ammo_log 'All complete — reload shell for scopy/spaste/sclear'
@@ -102,6 +106,7 @@ case "$ACTION" in
   Antivirus)  bash "$AMMO_ROOT/modules/antivirus.sh" $EXTRA ;;
   Surveillance) bash "$AMMO_ROOT/modules/anti_surveillance.sh" ;;
   FCC)        bash "$AMMO_ROOT/modules/fcc_guard.sh" ;;
+  HumanContact) bash "$AMMO_ROOT/modules/human_contact_regulator.sh" ;;
   Clipboard)  cmd_clipboard "$EXTRA" ;;
   Scrub)      bash "$AMMO_ROOT/modules/scrub_location.sh" ;;
   Status)     cmd_status ;;
