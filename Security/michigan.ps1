@@ -9,7 +9,7 @@ $map = @{
     'All' = 'All'; 'Net' = 'Net'; 'Samba' = 'Net'; 'Scrub' = 'Scrub'
     'Clipboard' = 'Clipboard'; 'Status' = 'Status'; 'Help' = 'Help'
     'Services' = 'Services'; 'Antivirus' = 'Antivirus'
-    'Surveillance' = 'Surveillance'; 'FCC' = 'FCC'; 'FCCEmissions' = 'FCCEmissions'
+    'Surveillance' = 'Surveillance'; 'FCC' = 'FCC'; 'FCCEmissions' = 'FCCEmissions'; 'DeadAir' = 'DeadAir'
     'HumanContact' = 'HumanContact'; 'Clasp' = 'Clasp'
 }
 $mapped = if ($map.ContainsKey($Action)) { $map[$Action] } else { $Action }

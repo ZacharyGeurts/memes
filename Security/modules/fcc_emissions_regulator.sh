@@ -136,6 +136,7 @@ cmd_fcc_audit() {
   Conducted (USB):     ${FCC_USB_MV_MIN}–${FCC_USB_MV_MAX} mV, ≤${FCC_USB_MA_MAX} mA
   Radiated (2.4 GHz):  ≤${FCC_WIFI_DBM_MAX} dBm EIRP software cap
   Modulation:          DSSS/OFDM via certified stack only; no SDR TX, no monitor/inject
+  Dead air:            no rapid power/RF fluctuation encoding; idle = silence
   Ingress clasp:       USB/BT/WiFi locked when ammo -Action All applied
   Physical:            ferrite on USB cables; shielded enclosure for switching supplies
 EOF
@@ -146,8 +147,11 @@ cmd_fcc_emissions_regulator() {
   cmd_conducted_emissions
   cmd_radiated_emissions
   cmd_modulation_guard
+  local dead_air
+  dead_air="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dead_air_regulator.sh"
+  [[ -f "$dead_air" ]] && bash "$dead_air" || true
   cmd_fcc_audit
-  ammo_log 'FCC emissions envelope enforced — escaping voltage/modulation within Part 15'
+  ammo_log 'FCC emissions envelope enforced — stable rails, dead air, no encoded fluctuation'
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

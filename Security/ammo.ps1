@@ -1,7 +1,7 @@
 # ammo.ps1 v1 — SG ammosecurity stack (replaces memes/Security/michigan.ps1)
 #Requires -RunAsAdministrator
 param(
-    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'FCCEmissions', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
+    [ValidateSet('All', 'Net', 'Services', 'Antivirus', 'Surveillance', 'FCC', 'FCCEmissions', 'DeadAir', 'HumanContact', 'Clasp', 'Scrub', 'Clipboard', 'Status', 'Help')]
     [string]$Action = 'Help',
     [switch]$Init,
     [switch]$PurgeSamba,
@@ -9,7 +9,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = 4
+$Version = 5
 $AmmoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 function Log([string]$Msg) { Write-Host "[ammo v$Version] $Msg" }
@@ -25,6 +25,7 @@ ammo.ps1 v$Version — SG ammosecurity (run as Administrator)
   .\ammo.ps1 -Action Surveillance
   .\ammo.ps1 -Action FCC
   .\ammo.ps1 -Action FCCEmissions
+  .\ammo.ps1 -Action DeadAir
   .\ammo.ps1 -Action HumanContact
   .\ammo.ps1 -Action Clasp
   .\ammo.ps1 -Action Clasp -Unlock
@@ -156,6 +157,34 @@ function Invoke-AmmoFCC {
     } catch { }
 
     Invoke-AmmoFCCEmissions
+    Invoke-AmmoDeadAir
+}
+
+function Invoke-AmmoDeadAir {
+    Log 'dead air — no rapid encoded fluctuation; silence out-of-function devices'
+    try {
+        powercfg /SETACVALUEINDEX SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5 2>$null | Out-Null
+        powercfg /SETDCVALUEINDEX SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5 2>$null | Out-Null
+        powercfg /SETACTIVE SCHEME_CURRENT 2>$null | Out-Null
+        Log 'CPU min throttle raised — damp rapid power-rail ripple encoding'
+    } catch { }
+
+    # WiFi dead air: no background scan when not connected
+    try { netsh wlan set autoconfig enabled=no 2>$null | Out-Null } catch { }
+    Get-NetAdapter -ErrorAction SilentlyContinue |
+        Where-Object { ($_.Name -match 'Wi-?Fi|WLAN') -and $_.Status -ne 'Up' } |
+        ForEach-Object { Disable-NetAdapter -Name $_.Name -Confirm:$false -ErrorAction SilentlyContinue }
+
+    # Webcam/mic out-of-function → dead air
+    Get-PnpDevice -Class Camera -ErrorAction SilentlyContinue |
+        Where-Object { $_.Status -eq 'OK' } |
+        ForEach-Object { Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue; Log "camera dead air: $($_.FriendlyName)" }
+
+    Get-PnpDevice -Class 'AudioEndpoint','MEDIA' -ErrorAction SilentlyContinue |
+        Where-Object { $_.FriendlyName -match 'Microphone|Mic' } |
+        ForEach-Object { Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue; Log "mic dead air: $($_.FriendlyName)" }
+
+    Log 'policy: stable power rails, no rapid duty-cycle encoding, RF silent when idle'
 }
 
 function Invoke-AmmoHumanContact {
@@ -309,6 +338,7 @@ switch ($Action) {
         Invoke-AmmoSurveillance
         Invoke-AmmoFCC
         Invoke-AmmoHumanContact
+        Invoke-AmmoDeadAir
         Invoke-AmmoIngressClasp
         Invoke-AmmoScrub
         Invoke-AmmoClipboard
@@ -320,6 +350,7 @@ switch ($Action) {
     'Surveillance'  { Invoke-AmmoSurveillance }
     'FCC'           { Invoke-AmmoFCC }
     'FCCEmissions'  { Invoke-AmmoFCCEmissions }
+    'DeadAir'       { Invoke-AmmoDeadAir }
     'HumanContact'  { Invoke-AmmoHumanContact }
     'Clasp'         { Invoke-AmmoIngressClasp }
     'Scrub'         { Invoke-AmmoScrub }
