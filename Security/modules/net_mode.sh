@@ -39,7 +39,7 @@ cmd_apply_nft() {
   local -a nft_args=("$mode")
   [[ -n "$killswitch" ]] && nft_args+=(--killswitch)
   [[ "$AMMO_VPN_ONLY" == 1 ]] && nft_args+=(--vpn-only)
-  bash "$MOD/interface_guard.sh" "${nft_args[@]}"
+  ammo_run_module "interface_guard" bash "$MOD/interface_guard.sh" "${nft_args[@]}"
 }
 
 cmd_apply_mode() {

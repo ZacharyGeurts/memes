@@ -8,7 +8,7 @@ AMMO_STATE="${AMMO_STATE:-/var/lib/ammosecurity}"
 AMMO_PREFS="${AMMO_PREFS:-${HOME}/.config/ammo-shield/prefs}"
 AMMO_NFT_TABLE='inet amouranth_shield'
 AMMO_NFT_LEGACY='inet ammosecurity'
-SUDO_PW="${SUDO_PW:-mememe}"
+SUDO_PW="${SUDO_PW:-}"
 export HOME="${HOME:-/home/default}"
 AMOURANTH_TAGLINE="${AMOURANTH_TAGLINE:-glamorous defense, ruthless logic}"
 AMMO_DRY_RUN="${AMMO_DRY_RUN:-0}"
@@ -30,14 +30,37 @@ ammo_tip() { printf '  → %s\n' "$*"; }
 
 ammo_sudo() {
   [[ "$AMMO_DRY_RUN" == 1 ]] && return 0
-  printf '%s\n' "$SUDO_PW" | sudo -S -p '' "$@" 2>/dev/null || true
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    "$@"
+    return $?
+  fi
+  if sudo -n true 2>/dev/null; then
+    sudo -n "$@"
+    return $?
+  fi
+  if [[ -n "$SUDO_PW" ]]; then
+    printf '%s\n' "$SUDO_PW" | sudo -S -p '' "$@" 2>/dev/null && return 0
+  fi
+  sudo "$@"
 }
 
 ammo_need_root() {
-  if [[ "${EUID:-$(id -u)}" -ne 0 ]] && ! ammo_sudo true; then
-    ammo_log "need root or valid SUDO_PW — re-run with sudo"
-    return 1
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then return 0; fi
+  if sudo -n true 2>/dev/null; then return 0; fi
+  if [[ -n "$SUDO_PW" ]] && printf '%s\n' "$SUDO_PW" | sudo -S -p '' true 2>/dev/null; then return 0; fi
+  ammo_log 'need root — run with sudo or cache credentials (sudo -v)'
+  return 1
+}
+
+ammo_run_module() {
+  local label="$1"
+  shift
+  if "$@"; then
+    return 0
   fi
+  local rc=$?
+  ammo_log "module failed: $label (rc=$rc)"
+  return 0
 }
 
 ammo_service_off() {
@@ -49,24 +72,57 @@ ammo_service_off() {
 
 ammo_kill_pattern() { pkill -f "$1" 2>/dev/null || true; }
 
+ammo_state_fallback() {
+  echo "${HOME}/.local/share/ammosecurity"
+}
+
 ammo_state_ensure() {
-  ammo_sudo mkdir -p "$AMMO_STATE" 2>/dev/null || mkdir -p "${HOME}/.local/share/ammosecurity" 2>/dev/null || true
+  mkdir -p "$(ammo_state_fallback)" 2>/dev/null || true
+  ammo_sudo mkdir -p "$AMMO_STATE" 2>/dev/null || true
+}
+
+ammo_state_write() {
+  local key="$1" val="$2"
+  local fallback
+  fallback="$(ammo_state_fallback)/${key}"
+  ammo_state_ensure
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    printf '%s\n' "$val" >"${AMMO_STATE}/${key}"
+    return 0
+  fi
+  if ammo_sudo -n true 2>/dev/null || ammo_sudo true 2>/dev/null; then
+    ammo_sudo sh -c "printf '%s\n' '$val' > '${AMMO_STATE}/${key}'" 2>/dev/null \
+      && return 0
+  fi
+  printf '%s\n' "$val" >"$fallback"
+}
+
+ammo_state_logfile() {
+  local name="$1"
+  local logfile="${AMMO_STATE}/${name}"
+  if [[ -w "$(dirname "$logfile")" ]] 2>/dev/null; then
+    echo "$logfile"
+  else
+    echo "$(ammo_state_fallback)/${name}"
+  fi
 }
 
 ammo_log_violation() {
   local msg="$1"
+  local logfile
   ammo_state_ensure
-  local logfile="${AMMO_STATE}/violations.log"
-  [[ -w "$(dirname "$logfile")" ]] 2>/dev/null || logfile="${HOME}/.local/share/ammosecurity/violations.log"
+  logfile="$(ammo_state_logfile violations.log)"
+  mkdir -p "$(dirname "$logfile")" 2>/dev/null || true
   printf '%s %s\n' "$(date -Is 2>/dev/null || date)" "$msg" >>"$logfile" 2>/dev/null || true
   ammo_log "VIOLATION: $msg"
 }
 
 ammo_log_mode_change() {
   local msg="$1"
+  local logfile
   ammo_state_ensure
-  local logfile="${AMMO_STATE}/mode_changes.log"
-  [[ -w "$(dirname "$logfile")" ]] 2>/dev/null || logfile="${HOME}/.local/share/ammosecurity/mode_changes.log"
+  logfile="$(ammo_state_logfile mode_changes.log)"
+  mkdir -p "$(dirname "$logfile")" 2>/dev/null || true
   printf '%s %s\n' "$(date -Is 2>/dev/null || date)" "$msg" >>"$logfile" 2>/dev/null || true
   ammo_log "$msg"
 }
@@ -85,12 +141,27 @@ ammo_detect_vpn_ifaces() {
 
 ammo_nft_available() { command -v nft >/dev/null 2>&1; }
 
+ammo_valid_net_mode() {
+  case "$1" in
+    wifi|ethernet|both|airgap) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 ammo_state_read() {
   local key="$1"
-  local f="${AMMO_STATE}/${key}"
-  if [[ -f "$f" ]]; then cat "$f"; return 0; fi
-  f="${HOME}/.local/share/ammosecurity/${key}"
-  [[ -f "$f" ]] && cat "$f" || return 1
+  local f val=""
+  for f in "${AMMO_STATE}/${key}" "$(ammo_state_fallback)/${key}"; do
+    [[ -f "$f" ]] || continue
+    val="$(tr -d '[:space:]' <"$f")"
+    [[ -n "$val" ]] || continue
+    if [[ "$key" == net_mode ]] && ! ammo_valid_net_mode "$val"; then
+      continue
+    fi
+    echo "$val"
+    return 0
+  done
+  return 1
 }
 
 ammo_iface_is_up() {
@@ -129,8 +200,8 @@ ammo_prefs_init() {
   mkdir -p "$(dirname "$AMMO_PREFS")" 2>/dev/null || true
   if [[ ! -f "$AMMO_PREFS" ]]; then
     printf '%s\n' \
-      '# Amouranth Shield toggles — 0=off 1=on' \
-      'WIFI=0' 'ETHERNET=0' 'OBS=0' 'CLIPBOARD=0' 'CLASP_UNLOCK=0' 'VPN_ONLY=0' >"$AMMO_PREFS"
+      '# Amouranth Shield toggles — 0=off 1=on (clipboard is always mandatory)' \
+      'WIFI=0' 'ETHERNET=0' 'OBS=0' 'CLASP_UNLOCK=0' 'VPN_ONLY=0' >"$AMMO_PREFS"
   fi
 }
 

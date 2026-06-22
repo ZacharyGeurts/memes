@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ammo.sh — Amouranth Shield. Terminal command: ./ammo.sh
-set -euo pipefail
+set -uo pipefail
 
 export AMOURANTH_BRAND=1
 AMMO_VERSION=2
@@ -104,17 +104,18 @@ cmd_status() {
 cmd_lock() {
   local mod="$AMMO_ROOT/modules"
   ammo_log 'locking down'
-  bash "$mod/net_mode.sh" both --killswitch
-  bash "$mod/screen_guard.sh" enable
-  bash "$mod/net_harden.sh"
-  bash "$mod/service_cleaner.sh"
-  bash "$mod/antivirus.sh" -PurgeClam
-  bash "$mod/anti_surveillance.sh"
-  bash "$mod/fcc_guard.sh"
-  bash "$mod/dead_air_regulator.sh"
-  bash "$mod/human_contact_regulator.sh"
-  bash "$mod/ingress_clasp.sh"
-  bash "$mod/ammo_watch.sh" install 2>/dev/null || true
+  ammo_run_module net_mode bash "$mod/net_mode.sh" airgap --killswitch
+  ammo_run_module screen_guard bash "$mod/screen_guard.sh" enable
+  ammo_run_module net_harden bash "$mod/net_harden.sh"
+  ammo_run_module service_cleaner bash "$mod/service_cleaner.sh"
+  ammo_run_module clam_purge bash "$mod/antivirus.sh" -PurgeClam
+  ammo_run_module surveillance bash "$mod/anti_surveillance.sh"
+  ammo_run_module fcc bash "$mod/fcc_guard.sh"
+  ammo_run_module dead_air bash "$mod/dead_air_regulator.sh"
+  ammo_run_module human_contact bash "$mod/human_contact_regulator.sh"
+  ammo_run_module ingress_lock bash "$mod/ingress_clasp.sh"
+  ammo_run_module clipboard bash "$AMMO_ROOT/install_clipboard.sh"
+  ammo_run_module watcher bash "$mod/ammo_watch.sh" install
   ammo_log 'locked'
 }
 

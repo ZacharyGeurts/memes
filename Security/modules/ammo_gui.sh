@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ammo_gui.sh — pure shell tick-box menu (uses lib/common.sh box + prefs)
-set -euo pipefail
+set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/common.sh"
 MOD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AMMO_ROOT="$(cd "$MOD/.." && pwd)"
@@ -9,64 +9,72 @@ GUI_AUTOSTART="${HOME}/.config/autostart/ammo-shield.desktop"
 export AMOURANTH_BRAND=1
 
 gui_mandatory() {
-  bash "$MOD/net_harden.sh" >/dev/null 2>&1 || true
-  bash "$MOD/service_cleaner.sh" >/dev/null 2>&1 || true
-  bash "$MOD/antivirus.sh" -PurgeClam >/dev/null 2>&1 || true
-  bash "$MOD/anti_surveillance.sh" >/dev/null 2>&1 || true
-  bash "$MOD/fcc_guard.sh" >/dev/null 2>&1 || true
-  bash "$MOD/dead_air_regulator.sh" >/dev/null 2>&1 || true
-  bash "$MOD/human_contact_regulator.sh" >/dev/null 2>&1 || true
-  bash "$MOD/screen_guard.sh" enable >/dev/null 2>&1 || true
-  bash "$MOD/ammo_watch.sh" install >/dev/null 2>&1 || true
+  ammo_run_module net_harden bash "$MOD/net_harden.sh"
+  ammo_run_module service_cleaner bash "$MOD/service_cleaner.sh"
+  ammo_run_module clam_purge bash "$MOD/antivirus.sh" -PurgeClam
+  ammo_run_module surveillance bash "$MOD/anti_surveillance.sh"
+  ammo_run_module fcc bash "$MOD/fcc_guard.sh"
+  ammo_run_module dead_air bash "$MOD/dead_air_regulator.sh"
+  ammo_run_module human_contact bash "$MOD/human_contact_regulator.sh"
+  ammo_run_module screen_guard bash "$MOD/screen_guard.sh" enable
+  ammo_run_module watcher bash "$MOD/ammo_watch.sh" install
+  ammo_run_module clipboard bash "$AMMO_ROOT/install_clipboard.sh"
+}
+
+gui_apply_network() {
+  local net vpn
+  net="$(ammo_prefs_net_mode)"
+  vpn="$(ammo_prefs_read VPN_ONLY 0)"
+  export AMMO_VPN_ONLY="$vpn"
+  case "$net" in
+    wifi)     ammo_run_module net_wifi bash "$MOD/net_mode.sh" wifi --killswitch ;;
+    ethernet) ammo_run_module net_eth bash "$MOD/net_mode.sh" ethernet --killswitch ;;
+    both)     ammo_run_module net_both bash "$MOD/net_mode.sh" both --killswitch ;;
+    *)        ammo_run_module net_airgap bash "$MOD/net_mode.sh" airgap --killswitch ;;
+  esac
+}
+
+gui_apply_optional() {
+  local obs clasp
+  obs="$(ammo_prefs_read OBS 0)"
+  clasp="$(ammo_prefs_read CLASP_UNLOCK 0)"
+  if [[ "$obs" == 1 ]]; then
+    ammo_run_module obs bash "$MOD/obs_compat.sh"
+  fi
+  if [[ "$clasp" == 1 ]]; then
+    ammo_run_module ingress_unlock bash "$MOD/ingress_clasp.sh" -Unlock
+  else
+    ammo_run_module ingress_lock bash "$MOD/ingress_clasp.sh"
+  fi
 }
 
 gui_apply() {
-  local net obs clip clasp vpn
-  net="$(ammo_prefs_net_mode)"
-  obs="$(ammo_prefs_read OBS 0)"
-  clip="$(ammo_prefs_read CLIPBOARD 0)"
-  clasp="$(ammo_prefs_read CLASP_UNLOCK 0)"
-  vpn="$(ammo_prefs_read VPN_ONLY 0)"
-
-  export AMMO_VPN_ONLY="$vpn"
-  case "$net" in
-    wifi)     bash "$MOD/net_mode.sh" wifi --killswitch ;;
-    ethernet) bash "$MOD/net_mode.sh" ethernet --killswitch ;;
-    both)     bash "$MOD/net_mode.sh" both --killswitch ;;
-    *)        bash "$MOD/net_mode.sh" airgap --killswitch ;;
-  esac
-
-  if [[ "$obs" == 1 ]]; then bash "$MOD/obs_compat.sh" >/dev/null 2>&1 || true; fi
-  if [[ "$clip" == 1 ]]; then bash "$AMMO_ROOT/install_clipboard.sh" >/dev/null 2>&1 || true; fi
-  if [[ "$clasp" == 1 ]]; then
-    bash "$MOD/ingress_clasp.sh" -Unlock >/dev/null 2>&1 || true
-  else
-    bash "$MOD/ingress_clasp.sh" >/dev/null 2>&1 || true
-  fi
   gui_mandatory
+  gui_apply_network
+  gui_apply_optional
 }
 
 gui_has_saved_on() {
-  grep -qE '^(WIFI|ETHERNET|OBS|CLIPBOARD|CLASP_UNLOCK|VPN_ONLY)=1' "$AMMO_PREFS" 2>/dev/null
+  grep -qE '^(WIFI|ETHERNET|OBS|CLASP_UNLOCK|VPN_ONLY)=1' "$AMMO_PREFS" 2>/dev/null
 }
 
 gui_startup() {
   ammo_clear_screen
   gui_mandatory
   if gui_has_saved_on; then
-    gui_apply
+    gui_apply_network
+    gui_apply_optional
   else
-    bash "$MOD/net_mode.sh" airgap --killswitch >/dev/null 2>&1 || true
-    bash "$MOD/ingress_clasp.sh" >/dev/null 2>&1 || true
+    ammo_run_module net_airgap bash "$MOD/net_mode.sh" airgap --killswitch
+    ammo_run_module ingress_lock bash "$MOD/ingress_clasp.sh"
   fi
 }
 
 gui_draw() {
-  local w e obs clip clasp vpn net prefs_line
+  local w e obs clasp vpn net prefs_line
   w="$(ammo_prefs_read WIFI 0)"
   e="$(ammo_prefs_read ETHERNET 0)"
   obs="$(ammo_prefs_read OBS 0)"
-  clip="$(ammo_prefs_read CLIPBOARD 0)"
   clasp="$(ammo_prefs_read CLASP_UNLOCK 0)"
   vpn="$(ammo_prefs_read VPN_ONLY 0)"
   net="$(ammo_prefs_net_mode)"
@@ -85,14 +93,14 @@ gui_draw() {
   ammo_box_row '[x]  firewall  kernel  SMB  ClamAV purge'
   ammo_box_row '[x]  screen guard  watcher  surveillance'
   ammo_box_row '[x]  FCC  dead-air  human-contact  kill-switch'
+  ammo_box_row '[x]  secure clipboard  ingress clasp LOCKED'
   ammo_box_div
   ammo_box_row 'YOUR TOGGLES  press number to flip'
   ammo_box_row "$(ammo_tick_char "$w")  1  WiFi"
   ammo_box_row "$(ammo_tick_char "$e")  2  Ethernet"
-  ammo_box_row "$(ammo_tick_char "$obs")  3  OBS PipeWire"
-  ammo_box_row "$(ammo_tick_char "$clip")  4  Secure clipboard"
-  ammo_box_row "$(ammo_tick_char "$clasp")  5  Ingress unlock"
-  ammo_box_row "$(ammo_tick_char "$vpn")  6  VPN-only egress"
+  ammo_box_row "$(ammo_tick_char "$obs")  3  OBS PipeWire (optional)"
+  ammo_box_row "$(ammo_tick_char "$vpn")  4  VPN-only egress"
+  ammo_box_row "$(ammo_tick_char "$clasp")  5  Ingress unlock (danger)"
   ammo_box_div
   ammo_box_row 'a apply  t test  s status  r refresh  0 quit'
   ammo_box_bot
@@ -114,7 +122,7 @@ gui_test_view() {
   ammo_box_row "wifi    : $(ammo_prefs_read WIFI 0)"
   ammo_box_row "eth     : $(ammo_prefs_read ETHERNET 0)"
   ammo_box_row "obs     : $(ammo_prefs_read OBS 0)"
-  ammo_box_row "clip    : $(ammo_prefs_read CLIPBOARD 0)"
+  ammo_box_row "clip    : mandatory"
   ammo_box_row "ingress : $(ammo_prefs_read CLASP_UNLOCK 0)"
   ammo_box_row "vpn     : $(ammo_prefs_read VPN_ONLY 0)"
   ammo_box_bot
@@ -129,7 +137,7 @@ gui_on_key() {
     1) ammo_prefs_toggle WIFI; gui_apply ;;
     2) ammo_prefs_toggle ETHERNET; gui_apply ;;
     3) ammo_prefs_toggle OBS; gui_apply ;;
-    4) ammo_prefs_toggle CLIPBOARD; gui_apply ;;
+    4) ammo_prefs_toggle VPN_ONLY; gui_apply ;;
     5)
       if [[ "$(ammo_prefs_read CLASP_UNLOCK 0)" == 1 ]]; then
         ammo_prefs_write CLASP_UNLOCK 0; gui_apply
@@ -137,7 +145,6 @@ gui_on_key() {
         ammo_prefs_write CLASP_UNLOCK 1; gui_apply
       fi
       ;;
-    6) ammo_prefs_toggle VPN_ONLY; gui_apply ;;
     a|A) gui_apply; ammo_log 'applied' ;;
     t|T) gui_apply; gui_test_view ;;
     s|S)
@@ -146,21 +153,21 @@ gui_on_key() {
       printf '\n  press Enter: '
       read -r _
       ;;
-    r|R) gui_mandatory; gui_apply; ammo_log 'mandatory refreshed' ;;
+    r|R) gui_apply; ammo_log 'mandatory refreshed' ;;
     0|q|Q)
       gui_apply
       ammo_clear_screen
       ammo_box_top
       ammo_box_center 'SAVED'
       ammo_box_row "$(ammo_tick_char "$(ammo_prefs_read WIFI 0)") WiFi  $(ammo_tick_char "$(ammo_prefs_read ETHERNET 0)") Eth"
-      ammo_box_row "$(ammo_tick_char "$(ammo_prefs_read OBS 0)") OBS  $(ammo_tick_char "$(ammo_prefs_read CLIPBOARD 0)") Clip"
+      ammo_box_row "$(ammo_tick_char "$(ammo_prefs_read OBS 0)") OBS  [x] Clip"
       ammo_box_row "$(ammo_tick_char "$(ammo_prefs_read CLASP_UNLOCK 0)") Ingress  $(ammo_tick_char "$(ammo_prefs_read VPN_ONLY 0)") VPN"
       ammo_box_row 'You are welcome.'
       ammo_box_bot
       printf '\n'
       return 1
       ;;
-    *) printf '\n  use 1-6, a, t, s, r, or 0\n'; sleep 0.6 ;;
+    *) printf '\n  use 1-5, a, t, s, r, or 0\n'; sleep 0.6 ;;
   esac
   return 0
 }
@@ -199,7 +206,6 @@ EOF
 
 cmd_secure() {
   ammo_prefs_init
-  gui_mandatory
   gui_apply
   [[ "${1:-}" != quiet ]] && ammo_log 'secure — mandatory on, ticks restored'
 }

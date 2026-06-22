@@ -94,8 +94,9 @@ cmd_nft_apply_mode() {
   done
 
   if ! ammo_nft_available; then
-    ammo_log 'nft missing — install: sudo apt install nftables'
-    return 1
+    ammo_log 'nft missing — ufw/net_harden only; install: sudo apt install nftables'
+    ammo_state_write net_mode "$mode"
+    return 0
   fi
 
   local rules
@@ -110,9 +111,7 @@ cmd_nft_apply_mode() {
   cmd_nft_reset
   printf '%s\n' "$rules" | ammo_sudo nft -f -
 
-  ammo_state_ensure
-  echo "$mode" | ammo_sudo tee "$AMMO_MODE_FILE" >/dev/null 2>&1 \
-    || echo "$mode" >"${HOME}/.local/share/ammosecurity/net_mode" 2>/dev/null || true
+  ammo_state_write net_mode "$mode"
   ammo_log_mode_change "nft applied mode=$mode killswitch=${killswitch:-off} vpn_only=$vpn_only table=$AMMO_NFT_TABLE"
 }
 
@@ -122,7 +121,11 @@ cmd_interface_guard_status() {
       || ammo_sudo nft list table $AMMO_NFT_LEGACY 2>/dev/null \
       || ammo_log 'nft table not active'
   fi
-  [[ -f "$AMMO_MODE_FILE" ]] && ammo_log "stored mode: $(cat "$AMMO_MODE_FILE")" || true
+  if mode="$(ammo_state_read net_mode 2>/dev/null)"; then
+    ammo_log "stored mode: $mode"
+  else
+    ammo_log 'stored mode: unset (corrupt state ignored)'
+  fi
   ip -br link 2>/dev/null | head -10 || true
 }
 
